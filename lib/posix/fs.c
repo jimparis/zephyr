@@ -65,8 +65,6 @@ int open(const char *name, int flags)
 	int rc, fd;
 	struct posix_fs_desc *ptr = NULL;
 
-	ARG_UNUSED(flags);
-
 	fd = z_reserve_fd();
 	if (fd < 0) {
 		return -1;
@@ -81,7 +79,20 @@ int open(const char *name, int flags)
 
 	(void)memset(&ptr->file, 0, sizeof(ptr->file));
 
-	rc = fs_open(&ptr->file, name);
+	int z_flags = 0;
+	switch (flags & (O_RDONLY | O_WRONLY | O_RDWR))
+	{
+	case O_RDONLY:
+		z_flags = FS_FLAGS_READ;
+		break;
+	case O_WRONLY:
+		z_flags = FS_FLAGS_WRITE;
+		break;
+	case O_RDWR:
+		z_flags = FS_FLAGS_READ | FS_FLAGS_WRITE;
+		break;
+	}
+	rc = fs_open(&ptr->file, name, z_flags);
 	if (rc < 0) {
 		posix_fs_free_obj(ptr);
 		z_free_fd(fd);

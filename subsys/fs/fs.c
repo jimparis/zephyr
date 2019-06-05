@@ -75,7 +75,7 @@ int fs_get_mnt_point(struct fs_mount_t **mnt_pntp,
 }
 
 /* File operations */
-int fs_open(struct fs_file_t *zfp, const char *file_name)
+int fs_open(struct fs_file_t *zfp, const char *file_name, int flags)
 {
 	struct fs_mount_t *mp;
 	int rc = -EINVAL;
@@ -95,7 +95,7 @@ int fs_open(struct fs_file_t *zfp, const char *file_name)
 	zfp->mp = mp;
 
 	if (zfp->mp->fs->open != NULL) {
-		rc = zfp->mp->fs->open(zfp, file_name);
+		rc = zfp->mp->fs->open(zfp, file_name, flags);
 		if (rc < 0) {
 			LOG_ERR("file open error (%d)", rc);
 			return rc;

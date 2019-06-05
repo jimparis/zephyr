@@ -135,7 +135,7 @@ struct fs_statvfs {
  */
 struct fs_file_system_t {
 	/* File operations */
-	int (*open)(struct fs_file_t *filp, const char *fs_path);
+	int (*open)(struct fs_file_t *filp, const char *fs_path, int flags);
 	ssize_t (*read)(struct fs_file_t *filp, void *dest, size_t nbytes);
 	ssize_t (*write)(struct fs_file_t *filp,
 					const void *src, size_t nbytes);
@@ -161,6 +161,10 @@ struct fs_file_system_t {
 					struct fs_statvfs *stat);
 };
 
+/* Flags */
+#define FS_FLAGS_READ   (1 << 0)
+#define FS_FLAGS_WRITE  (1 << 1)
+
 #ifndef FS_SEEK_SET
 #define FS_SEEK_SET	0	/* Seek from beginning of file. */
 #endif
@@ -180,11 +184,12 @@ struct fs_file_system_t {
  *
  * @param zfp Pointer to file object
  * @param file_name The name of file to open
+ * @param flags Open flags, passed to filesystem driver
  *
  * @retval 0 Success
  * @retval -ERRNO errno code if error
  */
-int fs_open(struct fs_file_t *zfp, const char *file_name);
+int fs_open(struct fs_file_t *zfp, const char *file_name, int flags);
 
 /**
  * @brief File close

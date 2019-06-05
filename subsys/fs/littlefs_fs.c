@@ -115,10 +115,15 @@ static const char *xxx_fix_path(const struct fs_mount_t *mp, const char *path)
 	return newpath;
 }
 
-static int littlefs_open(struct fs_file_t *fp, const char *path)
+static int littlefs_open(struct fs_file_t *fp, const char *path, int z_flags)
 {
 	path = xxx_fix_path(fp->mp, path);
-	int flags = LFS_O_CREAT | LFS_O_RDWR;
+
+	int flags = 0;
+	if (z_flags & FS_FLAGS_WRITE)
+		flags = LFS_O_CREAT | LFS_O_RDWR;
+	else
+		flags = LFS_O_RDONLY;
 
 	if (k_mem_slab_alloc(&lfs_file_pool, &fp->filep, K_NO_WAIT) != 0)
 		return -ENOMEM;
