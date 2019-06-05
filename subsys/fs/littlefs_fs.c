@@ -27,6 +27,22 @@ K_MEM_SLAB_DEFINE(lfs_file_pool, sizeof(struct lfs_file_cache_t),
 K_MEM_SLAB_DEFINE(lfs_dir_pool, sizeof(lfs_dir_t),
 		  CONFIG_FS_LITTLEFS_NUM_DIRS, 4);
 
+static inline struct lfs *mp_to_lfs(const struct fs_mount_t *mp)
+{
+	return &((struct fs_littlefs_t *)(mp->fs_data))->lfs;
+}
+
+static inline void mp_lock(const struct fs_mount_t *mp)
+{
+	k_mutex_lock(&((struct fs_littlefs_t *)(mp->fs_data))->mutex,
+		     K_FOREVER);
+}
+
+static inline void mp_unlock(const struct fs_mount_t *mp)
+{
+	k_mutex_unlock(&((struct fs_littlefs_t *)(mp->fs_data))->mutex);
+}
+
 static int translate_error(int error)
 {
 	if (error >= 0)
@@ -128,6 +144,8 @@ static int littlefs_open(struct fs_file_t *fp, const char *path, int z_flags)
 	if (k_mem_slab_alloc(&lfs_file_pool, &fp->filep, K_NO_WAIT) != 0)
 		return -ENOMEM;
 
+	mp_lock(fp->mp);
+
 	/* Use cache inside the slab allocation, instead of letting
 	   littlefs allocate it from the heap. */
 	struct lfs_file_cache_t *fc = fp->filep;
@@ -139,48 +157,62 @@ static int littlefs_open(struct fs_file_t *fp, const char *path, int z_flags)
 				   path, flags, &fc->config);
 	if (ret < 0)
 		k_mem_slab_free(&lfs_file_pool, &fp->filep);
+
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_close(struct fs_file_t *fp)
 {
+	mp_lock(fp->mp);
 	int ret = lfs_file_close(fp->mp->fs_data, &LFS_FILE(fp));
 	k_mem_slab_free(&lfs_file_pool, &fp->filep);
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_unlink(struct fs_mount_t *mountp, const char *path)
 {
 	path = xxx_fix_path(mountp, path);
+	mp_lock(mountp);
 	int ret = lfs_remove(mountp->fs_data, path);
+	mp_unlock(mountp);
 	return translate_error(ret);
 }
 
 static int littlefs_rename(struct fs_mount_t *mountp, const char *from,
 			   const char *to)
 {
+	mp_lock(mountp);
 	int ret = lfs_rename(mountp->fs_data, from, to);
+	mp_unlock(mountp);
 	return translate_error(ret);
 }
 
 static ssize_t littlefs_read(struct fs_file_t *fp, void *ptr, size_t len)
 {
+	mp_lock(fp->mp);
 	int ret = lfs_file_read(fp->mp->fs_data, &LFS_FILE(fp), ptr, len);
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static ssize_t littlefs_write(struct fs_file_t *fp, const void *ptr, size_t len)
 {
+	mp_lock(fp->mp);
 	int ret = lfs_file_write(fp->mp->fs_data, &LFS_FILE(fp), ptr, len);
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_seek(struct fs_file_t *fp, off_t off, int whence)
 {
+	mp_lock(fp->mp);
 	_Static_assert((FS_SEEK_SET == LFS_SEEK_SET) &&
 		       (FS_SEEK_CUR == LFS_SEEK_CUR) &&
 		       (FS_SEEK_END == LFS_SEEK_END), "Flag mismatch");
 	int ret = lfs_file_seek(fp->mp->fs_data, &LFS_FILE(fp), off, whence);
+	mp_unlock(fp->mp);
 	/* XXX Zephyr API is bad; successful seek is documented to return 0! */
 	if (ret > 0)
 		return 0;
@@ -189,26 +221,34 @@ static int littlefs_seek(struct fs_file_t *fp, off_t off, int whence)
 
 static off_t littlefs_tell(struct fs_file_t *fp)
 {
+	mp_lock(fp->mp);
 	int ret = lfs_file_tell(fp->mp->fs_data, &LFS_FILE(fp));
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_truncate(struct fs_file_t *fp, off_t length)
 {
+	mp_lock(fp->mp);
 	int ret = lfs_file_truncate(fp->mp->fs_data, &LFS_FILE(fp), length);
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_sync(struct fs_file_t *fp)
 {
+	mp_lock(fp->mp);
 	int ret = lfs_file_sync(fp->mp->fs_data, &LFS_FILE(fp));
+	mp_unlock(fp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_mkdir(struct fs_mount_t *mountp, const char *path)
 {
+	mp_lock(mountp);
 	path = xxx_fix_path(mountp, path);
 	int ret = lfs_mkdir(mountp->fs_data, path);
+	mp_unlock(mountp);
 	return translate_error(ret);
 }
 
@@ -218,10 +258,14 @@ static int littlefs_opendir(struct fs_dir_t *dp, const char *path)
 	if (k_mem_slab_alloc(&lfs_dir_pool, &dp->dirp, K_NO_WAIT) != 0)
 		return -ENOMEM;
 
+	mp_lock(dp->mp);
+
 	memset(dp->dirp, 0, sizeof(struct lfs_dir));
 	int ret = lfs_dir_open(dp->mp->fs_data, dp->dirp, path);
 	if (ret < 0)
 		k_mem_slab_free(&lfs_dir_pool, &dp->dirp);
+
+	mp_unlock(dp->mp);
 	return translate_error(ret);
 }
 
@@ -237,6 +281,8 @@ static void info_to_dirent(const struct lfs_info *info, struct fs_dirent *entry)
 static int littlefs_readdir(struct fs_dir_t *dp, struct fs_dirent *entry)
 {
 	struct lfs_info info;
+
+	mp_lock(dp->mp);
 	int ret = lfs_dir_read(dp->mp->fs_data, dp->dirp, &info);
 	if (ret > 0) {
 		info_to_dirent(&info, entry);
@@ -245,24 +291,29 @@ static int littlefs_readdir(struct fs_dir_t *dp, struct fs_dirent *entry)
 		entry->name[0] = '\0';
 	}
 
+	mp_unlock(dp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_closedir(struct fs_dir_t *dp)
 {
+	mp_lock(dp->mp);
 	int ret = lfs_dir_close(dp->mp->fs_data, dp->dirp);
 	k_mem_slab_free(&lfs_dir_pool, &dp->dirp);
+	mp_unlock(dp->mp);
 	return translate_error(ret);
 }
 
 static int littlefs_stat(struct fs_mount_t *mountp,
 			 const char *path, struct fs_dirent *entry)
 {
+	mp_lock(mountp);
 	path = xxx_fix_path(mountp, path);
 	struct lfs_info info;
 	int ret = lfs_stat(mountp->fs_data, path, &info);
 	if (ret >= 0)
 		info_to_dirent(&info, entry);
+	mp_unlock(mountp);
 	return translate_error(ret);
 }
 
@@ -272,6 +323,8 @@ static int littlefs_statvfs(struct fs_mount_t *mountp,
 	path = xxx_fix_path(mountp, path);
 	struct lfs *lfs = mountp->fs_data;
 
+	mp_lock(mountp);
+
 	stat->f_bsize = lfs->cfg->prog_size;
 	stat->f_frsize = lfs->cfg->block_size;
 	stat->f_blocks = lfs->cfg->block_count;
@@ -280,6 +333,7 @@ static int littlefs_statvfs(struct fs_mount_t *mountp,
 	if (ret >= 0)
 		stat->f_bfree = stat->f_blocks - ret;
 
+	mp_unlock(mountp);
 	return translate_error(ret);
 }
 
@@ -395,6 +449,9 @@ static int littlefs_mount(struct fs_mount_t *mountp)
 	}
 	LOG_INF("filesystem mounted!");
 
+	/* Create mutex */
+	k_mutex_init(&param->mutex);
+
 	return 0;
 }
 
@@ -402,8 +459,10 @@ static int littlefs_unmount(struct fs_mount_t *mountp)
 {
 	struct fs_littlefs_t *param = mountp->fs_data;
 
+	mp_lock(mountp);
 	lfs_unmount(&param->lfs);
 	flash_area_close(param->fa);
+	mp_unlock(mountp);
 	return 0;
 }
 

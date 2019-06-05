@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+#include <kernel.h>
 #include <lfs.h>
 
 /**
@@ -19,6 +20,7 @@ struct fs_littlefs_t {
 	struct lfs lfs;
 	struct lfs_config cfg;
 	const struct flash_area *fa;
+	struct k_mutex mutex;
 
 	/* Static buffers */
 	uint8_t read_buffer[CONFIG_FS_LITTLEFS_CACHE_SIZE];
