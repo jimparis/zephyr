@@ -3,6 +3,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#define DT_DRV_COMPAT nordic_nrf_pwm
+
 #include <nrfx_pwm.h>
 #include <drivers/pwm.h>
 #include <hal/nrf_gpio.h>
@@ -414,7 +416,7 @@ static int pwm_nrfx_pm_control(const struct device *dev,
 		.seq.length = NRF_PWM_CHANNEL_COUNT			      \
 	};								      \
 	PWM_NRFX_PM_CONTROL(idx)					      \
-	DEVICE_DT_INST_DEFINE(idx,					      \
+	DEVICE_DT_DEFINE(PWM(idx),				              \
 		      pwm_nrfx_init, pwm_##idx##_nrfx_pm_control,	      \
 		      &pwm_nrfx_##idx##_data,				      \
 		      &pwm_nrfx_##idx##config,				      \
