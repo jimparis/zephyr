@@ -4706,6 +4706,16 @@ extern void z_handle_obj_poll_events(sys_dlist_t *events, uint32_t state);
  */
 static inline void k_cpu_idle(void)
 {
+	/* see zephyr/subsys/logging/log_backend_swo.c */
+	extern uint32_t g_swo_can_idle_at;
+	if (g_swo_can_idle_at) {
+		if ((int32_t)(DWT->CYCCNT - g_swo_can_idle_at) < 0) {
+			/* can't idle yet */
+			irq_unlock(0);
+			return;
+		}
+		g_swo_can_idle_at = 0;
+	}
 	arch_cpu_idle();
 }
 
@@ -4727,6 +4737,16 @@ static inline void k_cpu_idle(void)
  */
 static inline void k_cpu_atomic_idle(unsigned int key)
 {
+	/* see zephyr/subsys/logging/log_backend_swo.c */
+	extern uint32_t g_swo_can_idle_at;
+	if (g_swo_can_idle_at) {
+		if ((int32_t)(DWT->CYCCNT - g_swo_can_idle_at) < 0) {
+			/* can't idle yet */
+			irq_unlock(key);
+			return;
+		}
+		g_swo_can_idle_at = 0;
+	}
 	arch_cpu_atomic_idle(key);
 }
 
