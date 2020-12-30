@@ -52,6 +52,9 @@
 
 static uint8_t buf[1];
 
+//#include <arch/arm/aarch32/cortex_m/cmsis.h>
+uint32_t g_swo_can_idle_at = 0;
+
 static int char_out(uint8_t *data, size_t length, void *ctx)
 {
 	ARG_UNUSED(ctx);
@@ -59,6 +62,17 @@ static int char_out(uint8_t *data, size_t length, void *ctx)
 	for (size_t i = 0; i < length; i++) {
 		ITM_SendChar(data[i]);
 	}
+
+	/* ITM buffers data, but trace clock appears to be gated when CPU
+	   executes WFI/WFE.  So we need to block arch_cpu_idle for a little
+	   bit:
+	   - 64 CPU cycles per SWO bit
+	   - 10 bits per byte
+	   - 2 bytes on SWO per ITM_SendChar
+	   - ~16 bytes buffered by nRF52
+	*/
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	g_swo_can_idle_at = DWT->CYCCNT + 64*10*2*16;
 
 	return length;
 }
