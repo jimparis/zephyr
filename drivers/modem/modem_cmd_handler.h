@@ -111,6 +111,8 @@ struct modem_cmd_handler_data {
 	/* locks */
 	struct k_sem sem_tx_lock;
 	struct k_sem sem_parse_lock;
+
+	void (*serial_debug_hook)(bool tx, const char *data, size_t len);
 };
 
 /**

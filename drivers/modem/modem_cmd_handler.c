@@ -358,6 +358,9 @@ static void cmd_handler_process_rx_buf(struct modem_cmd_handler_data *data)
 				data->match_buf_len - 1, match_len);
 		}
 
+		if (data->serial_debug_hook)
+			data->serial_debug_hook(0, data->match_buf, match_len);
+
 #if defined(CONFIG_MODEM_CONTEXT_VERBOSE_DEBUG)
 		LOG_HEXDUMP_DBG(data->match_buf, match_len, "RECV");
 #endif
@@ -499,6 +502,9 @@ static int _modem_cmd_send(struct modem_iface *iface,
 	if (ret < 0) {
 		goto unlock_tx_lock;
 	}
+
+	if (data->serial_debug_hook)
+		data->serial_debug_hook(1, buf, strlen(buf));
 
 #if defined(CONFIG_MODEM_CONTEXT_VERBOSE_DEBUG)
 	LOG_HEXDUMP_DBG(buf, strlen(buf), "SENT DATA");
